@@ -22,7 +22,7 @@ class UrlValidatorMixin:
         "website", "documentation", mode="before", check_fields=False
     )
     @classmethod
-    def format_url(cls, url: str) -> str:
+    def format_url(cls, url: str) -> str | None:
         """Append https to the beginning of URL if it doesn't exist & cleanup
         If the url doesn't have https add it
         If the url starts with http change it to https

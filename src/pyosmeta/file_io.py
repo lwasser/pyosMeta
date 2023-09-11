@@ -2,7 +2,7 @@ import pickle
 import urllib.request
 
 import ruamel.yaml
-from typing import Dict, List, Union
+from typing import Any, Dict, List, Union
 
 
 def load_pickle(filename):
@@ -11,7 +11,7 @@ def load_pickle(filename):
         return pickle.load(f)
 
 
-def _list_to_dict(a_list: List, a_key: str) -> Dict:
+def _list_to_dict(a_list: List, a_key: str) -> Dict[str, str | int]:
     """Takes a yaml file opened and turns into a dictionary
     The dict structure is key (gh_username) and then a dictionary
     containing all information for the username
@@ -46,17 +46,19 @@ def create_paths(repos: Union[list[str], str]) -> Union[list[str], str]:
     return all_paths
 
 
-def load_website_yml(key: str, url: str):
+def load_website_yml(key: str, url: str) -> Dict[str, str | int]:
     """
     This opens a website contrib yaml file and turns it in a
     dictionary
     """
+    # TODO - do i need to type yml_list?
     yml_list = open_yml_file(url)
 
     return _list_to_dict(yml_list, key)
 
 
-def open_yml_file(file_path: str) -> dict:
+# Double check best practices for a method with a raised exception for typing
+def open_yml_file(file_path: str) -> dict[str, str | int] | None:
     """Open & deserialize YAML file to dictionary.
 
     Parameters
@@ -76,9 +78,10 @@ def open_yml_file(file_path: str) -> dict:
             return ruamel.yaml.safe_load(f)
     except urllib.error.URLError as url_error:
         print("Oops - can find the url", file_path, url_error)
+        return None
 
 
-def export_yaml(filename: str, data_list: list):
+def export_yaml(filename: str, data_list: list[Any]) -> None:
     """Update website contrib file with the information grabbed from GitHub
     API
 
@@ -156,9 +159,7 @@ def clean_yaml_file(filename):
         f.write(cleaned_text)
 
 
-def clean_export_yml(
-    a_dict: Dict[str, Union[str, List[str]]], filename: str
-) -> None:
+def clean_export_yml(a_dict: List[Any], filename: str) -> None:
     """Inputs a dictionary with keys - contribs or packages.
     It then converse to a list for export, and creates a cleaned
     YAML file that is jekyll friendly

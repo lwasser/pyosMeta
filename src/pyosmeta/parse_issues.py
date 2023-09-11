@@ -81,20 +81,20 @@ class ReviewModel(BaseModel):
         "", validation_alias=AliasChoices("one-line_description_of_package")
     )
     submitting_author: dict[str, Optional[str]] = {}
-    all_current_maintainers: list[dict[str, str | None]] = {}
+    all_current_maintainers: list[dict[str, str | None]]
     repository_link: Optional[str] = None
     version_submitted: Optional[str] = None
     categories: Optional[list[str]] = None
     editor: dict[str, str | None] = {}
     reviewer_1: dict[str, str | None] = {}
     reviewer_2: dict[str, str | None] = {}
-    archive: Optional[str] = None
+    archive: Optional[str]
     version_accepted: Optional[str] = None
     date_accepted: Optional[str] = None
-    created_at: str = None
-    updated_at: str = None
+    created_at: str
+    updated_at: str
     closed_at: Optional[str] = None
-    issue_link: str = None
+    issue_link: str
     joss: Optional[str] = None
     gh_meta: Optional[GhMeta] = None
 
@@ -164,7 +164,7 @@ class ProcessIssues:
 
     """
 
-    def __init__(self, org, repo_name, label_name):
+    def __init__(self, org: str, repo_name: str, label_name: str):
         """
         More here...
 
@@ -276,13 +276,15 @@ class ProcessIssues:
             maintainer(s)
         """
 
-        meta = {}
+        meta: dict[str, list] = {}
         a_key = line_item[0].lower().replace(" ", "_")
         if self._contains_keyword(line_item[0]):
             if line_item[0].startswith("All current maintainers"):
                 names = line_item[1].split(",")
                 # There are at least 2 maintainers if there is a comma
                 # if len(names) > 1:
+                # Note sure how to type a variable - inline or on another?
+                # meta: Dict[str,str>]
                 meta[a_key] = []
                 for aname in names:
                     # Add each maintainer to the dict
@@ -293,7 +295,7 @@ class ProcessIssues:
                         "name": self._clean_name(user[0]),
                         "github_username": self._clean_name(user[1]),
                     }
-                    # filtered_list = list(filter(None, my_list))
+
                     meta[a_key].append(a_maint)
             else:
                 names = line_item[1].split("(", 1)
