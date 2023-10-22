@@ -37,6 +37,30 @@ def clean_date(a_date: Optional[str]) -> str:
             return "missing"
 
 
+def clean_markdown(txt: str) -> str:
+    """
+    Remove Markdown characters from the beginning or end of a string.
+
+    Parameters
+    ----------
+    txt : str
+        The input string containing Markdown characters.
+
+    Returns
+    -------
+    str
+        The input string with Markdown characters removed from the beginning
+        and end.
+    """
+
+    pattern = r"^[`*]+|[`*]+$"
+
+    # Use re.sub to remove the matched Markdown characters
+    cleaned = re.sub(pattern, "", txt)
+
+    return cleaned
+
+
 class GhMeta(BaseModel, UrlValidatorMixin):
     name: str
     description: str
@@ -128,6 +152,28 @@ class ReviewModel(BaseModel):
         """
 
         return clean_date(a_date)
+
+    @field_validator(
+        "package_name",
+        mode="before",
+    )
+    @classmethod
+    def clean_pkg_name(cls, pkg_name: str) -> str:
+        """A small cleaning step to remove any additional markdown
+        from a package's name
+
+        Parameters
+        ----------
+        pkg_name : str
+            Name of a pyOpenSci package extracted from review issue title
+
+        Returns
+        -------
+        str
+            Cleaned string with any markdown formatting removed.
+        """
+
+        return clean_markdown(pkg_name)
 
     @field_validator(
         "repository_link",
@@ -258,7 +304,10 @@ class ProcessIssues:
 
     def _contains_keyword(self, string: str) -> bool:
         """
-        Returns true if starts with any of the 3 items below.
+        Returns true if the key starts with any of the 3 review
+        meta items: Submitting, Editor, Reviewer or All current
+        maintainers. This is because these items hold username and github
+        username information that needs to be parsed specifically.
         """
         return string.startswith(
             ("Submitting", "Editor", "Reviewer", "All current maintainers")
@@ -291,6 +340,8 @@ class ProcessIssues:
         meta = {}
         a_key = line_item[0].lower().replace(" ", "_")
         if self._contains_keyword(line_item[0]):
+            # The maintainer metadata is a list of names. Parse it
+            # separately
             if line_item[0].startswith("All current maintainers"):
                 names = line_item[1].split(",")
                 # There are at least 2 maintainers if there is a comma
@@ -308,13 +359,26 @@ class ProcessIssues:
                     # filtered_list = list(filter(None, my_list))
                     meta[a_key].append(a_maint)
             else:
-                names = line_item[1].split("(", 1)
+                # Else, this is a reviewer, editor etc and only contains a
+                # single user that needs to be parsed
+                # This is splitting out the Name of the person (first and last)
+                # from the github username which is used as a key when parsing
+                # users
+
+                # TODO: this fails because it is splitting at a bracket
+                # but sometimes users use brackets to add a nickname,
+                # FIX: split at the @ symbol instead - this might fail if
+                # people dont use @
+                names = line_item[1].split("@", 1)
                 if len(names) > 1:
                     meta[a_key] = {
                         "github_username": self._clean_name(names[1]),
                         "name": self._clean_name(names[0]),
                     }
                 else:
+                    # Here we parse a string that ideally has the format
+                    # Name, @github_username but sometimes people add unique
+                    # text that breaks the cleanup step below
                     meta[a_key] = {
                         "github_username": self._clean_name(names[0]),
                         "name": "",
@@ -330,7 +394,8 @@ class ProcessIssues:
     ) -> dict[str, str]:
         """
         A function that parses through the header of an issue.
-        It returns
+        It returns core metadata in the issue needed to render on the
+        website whilst also cleaning up data collected from the issue.
 
         Parameters
         ----------
@@ -354,9 +419,12 @@ class ProcessIssues:
         review = {}
         for issue in issues:
             pkg_name, body_data = self.parse_comment(issue)
+
+            # Cleanup unusual characters in package name
+
             if not pkg_name:
                 continue
-            # Index of 15 should include date accepted in the review meta
+            # Index of 20 should include date accepted in the review meta
             review[pkg_name] = self.get_issue_meta(body_data, total_lines)
             # Add issue open and close date to package meta from GH response
             # Date cleaning happens via pydantic validator not here
@@ -376,26 +444,6 @@ class ProcessIssues:
                 and not key.startswith("-_[x]_i_agree")
             }
             review[pkg_name] = review_clean
-            # filtered = {}
-            # for key, value in review.items():
-            #     print(key)
-            #     if not key.startswith("##") and not key.startswith("-"):
-            #         filtered[key] = value
-
-            # # Clean markdown url's from editor, and reviewer lines
-            # TODO - this could be a reviewer name cleanup validaotr
-            # types = ["editor", "reviewer_1", "reviewer_2"]
-            # user_values = ["github_username", "name"]
-            # for a_type in types:
-            #     for user_value in user_values:
-            #         issue_meta[a_type][user_value] = (
-            #             issue_meta[a_type][user_value]
-            #             .replace("https://github.com/", "")
-            #             .replace("[", "")
-            #             .replace("]", "")
-            #         )
-
-            # review[pkg_name] = issue_meta
 
         return review
 
@@ -406,6 +454,8 @@ class ProcessIssues:
     ) -> dict[str, str]:
         """
         Parse through the top of an issue and grab the metadata for the review.
+        This method calls a helper method that parses out gh username
+        which are used as keys and actual usernames called `_get_line_meta`.
 
         Parameters
         ----------
@@ -422,6 +472,8 @@ class ProcessIssues:
         """
         issue_meta = {}
         for item in body_data[0:end_range]:
+            # if len(item) > 1 and item[1].startswith("Nhat"):
+            #     print("yes")
             # Clean date accepted element
             if "Date accepted".lower() in item[0].lower():
                 item[0] = "Date accepted"
@@ -505,7 +557,7 @@ class ProcessIssues:
 
         pkg_name = body_data[name_index][1] if name_index else None
 
-        return pkg_name, body_data
+        return clean_markdown(pkg_name), body_data
 
     def get_gh_metrics(
         self,

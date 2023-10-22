@@ -101,14 +101,23 @@ def main():
 
             all_contribs[user] = PersonModel(**existing)
 
-    # One time only - add contrib added date
-    history = load_pickle("contrib_dates.pickle")
+    """Below is a section that adds the date of a users initial contribution
+    date to the user yaml file. Because sometimes we have people that get added
+    years after they contributed (because this workflow didn't exist until
+    recently), this will help us keep the yaml file organized (and in order)
+    if we wish to sort by their contribution date we can.
 
-    for user, data in all_contribs.items():
-        try:
-            setattr(data, "date_added", history[user])
-        except KeyError:
-            print(f"Username {user} must be new, skipping")
+    """
+    update_dates = False
+    if update_dates:
+        # One time only - add contrib added date
+        history = load_pickle("contrib_dates.pickle")
+
+        for user, data in all_contribs.items():
+            try:
+                setattr(data, "date_added", history[user])
+            except KeyError:
+                print(f"Username {user} must be new, skipping")
 
     # Export to pickle which supports updates after parsing reviews
     with open("all_contribs.pickle", "wb") as f:

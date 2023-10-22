@@ -35,6 +35,7 @@ def main():
 
     # Get all issues for approved packages - load as dict
     issues = process_review.return_response()
+    # Added cleanup item for any issue title with `` (in it)
     accepted_reviews = process_review.parse_issue_header(issues, 45)
 
     # Update gh metrics via api for all packages
