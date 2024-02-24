@@ -271,10 +271,12 @@ class ProcessIssues:
     A class that processes GitHub issues in our peer review process and returns
     metadata about each package.
 
-
     """
 
-    def __init__(self, org, repo_name, label_name):
+    def __init__(self, org: str, 
+                 repo_name: str, 
+                 label_name: str | None = None, 
+                 state: str ="all"):
         """
         More here...
 
@@ -286,6 +288,8 @@ class ProcessIssues:
             Repo name where the software review issues live
         label_name : str
             Label of issues to grab - e.g. pyos approved
+        state : str
+            The issue state for github (open, closed)
         GITHUB_TOKEN : str
             API token needed to authenticate with GitHub
             Inherited from super() class
@@ -293,6 +297,7 @@ class ProcessIssues:
         self.org: str = org
         self.repo_name: str = repo_name
         self.label_name: str = label_name
+        self.state: str = state
         self.contrib_instance = ProcessContributors([])
 
         self.GITHUB_TOKEN = self.contrib_instance.get_token()
@@ -310,31 +315,107 @@ class ProcessIssues:
 
     @property
     def api_endpoint(self):
-        url = (
-            f"https://api.github.com/repos/{self.org}/{self.repo_name}/"
-            f"issues?labels={self.label_name}&state=all"
-        )
+
+        url = f"https://api.github.com/repos/{self.org}/{self.repo_name}/issues?"
+
+        # Add label_name to the URL if it's provided
+        if self.label_name:
+            url += f"labels={self.label_name}&"
+
+        # Set state to 'all' by default, but it can be overridden if specified
+        url += f"state={self.state or 'all'}"
         return url
+    
+    def _has_next_page(self, response: requests.Response) -> bool:
+        """
+        Check if there are more pages available in the response.
+
+        Parameters
+        ----------
+        response : requests.Response
+            The response object from the API.
+
+        Returns
+        -------
+        bool
+            True if there are more pages, False otherwise.
+        """
+
+        return 'Link' in response.headers
+
+    def _get_next_page_url(self, response: requests.Response) -> Optional[str]:
+        """
+        Get the URL of the next page from the response headers.
+
+        Parameters
+        ----------
+        response : requests.Response
+            The response object from the API.
+
+        Returns
+        -------
+        Optional[str]
+            The URL of the next page if available, None otherwise.
+        """
+
+        links = response.headers['Link'].split(', ')
+        next_page_url = None
+        for link in links:
+            url, rel = link.split('; ')
+            url = url[1:-1]
+            rel = rel[5:-1]
+            if rel == 'next':
+                next_page_url = url
+                break
+        return next_page_url
 
     # Set up the API endpoint
-    def _get_response(self):
+    def _get_response(self) -> requests.Response:
         """
-        # Make a GET request to the API endpoint
+        Fetch data from the GitHub API endpoint with pagination.
+
+        Returns
+        -------
+        requests.Response
+            Response object containing the fetched data.
         """
 
         print(self.api_endpoint)
 
+        # Define request pagination parameters
+        params = {
+            'per_page': 30, 
+            'page': 1 
+        }
+
         try:
-            response = requests.get(
-                self.api_endpoint,
-                headers={"Authorization": f"token {self.GITHUB_TOKEN}"},
-            )
-            response.raise_for_status()
+            # Support pagination. GitHub allows 30 items per call
+            current_page_url = self.api_endpoint
+            while True:
+                response = requests.get(
+                    current_page_url,
+                    headers={"Authorization": f"token {self.GITHUB_TOKEN}"},
+                    params=params  # Include pagination parameters in request
+                )
+                # Check for a response error using requests
+                response.raise_for_status()
+
+                # Check if there are more pages
+                if self._has_next_page(response):
+                    print("There's another page")
+                    next_page_url = self._get_next_page_url(response)
+                    print("current page", current_page_url)
+                    current_page_url = next_page_url
+                    print("next page", next_page_url)
+                else:
+                    break  # No more pages to fetch
 
         except requests.HTTPError as exception:
             raise exception
 
         return response
+
+
 
     def return_response(self) -> list[dict[str, object]]:
         """
